@@ -3,7 +3,7 @@
 #general
 import os
 import itertools
-import math
+import numpy as np
 
 # drawing
 from matplotlib import pyplot as plt
@@ -115,16 +115,51 @@ def smalldataframe(filename='belgian_job_posts_2017.csv', nlines=100):
     small.to_csv('df_' + str(nlines) + '.csv')
     return small
 
+def createdfactivity(df_companies):
+    # create DataFrame for activities
+    mindex = []
+    nacodes = []
+    activitygroups = []
+    nacever = []
+    clas = []
+    for comp in df_companies['EntityNumber']:
+        for act in df_companies[df_companies['EntityNumber'] == comp]['activities']:
+            mindex.append(list(zip([comp] * len(act),
+                          list(range(0, len(act))))))
 
-def main():
-    # df = read_csv('belgian_job_posts_2017.csv')
+            #nacodes[comp] = {i: [a['NaceCode'], a['ActivityGroup'],
+             #                  a['NaceVersion'], a['Classification']]
+             #              for i, a in enumerate(act)}
+            nacodes.append([a['NaceCode'] for i, a in enumerate(act)])
+            activitygroups.append([a['ActivityGroup'] for i, a in enumerate(act)])
+            nacever.append([a['NaceVersion'] for i, a in enumerate(act)])
+            clas.append([a['Classification'] for i, a in enumerate(act)])
+
+    # flatten lists
+    mindex = [item for sublist in mindex for item in sublist]
+    mi = pd.MultiIndex.from_tuples(mindex, names=['EntityNumber', 'ActivityN'])
+    #print("Makes sense?", nacodes)
+    actv_df = pd.DataFrame(index=mi) #,
+                           #columns=['NaceCode', 'ActivityGroup', 'NaceVersion',
+                           #        'Classification'])
+    print("df", actv_df)
+
+    actv_df['NaceCode'] = Series([item for sublist in nacodes for item in sublist], index=mi)
+    actv_df['ActivityGroup'] = Series([item for sublist in activitygroups for item in sublist], index=mi)
+    actv_df['NaceVersion'] = Series([item for sublist in nacever for item in sublist], index=mi)
+    actv_df['Classification'] = Series([item for sublist in clas for item in sublist], index=mi)
+    #actv_df.index.names = ['EntityNumber', 'ActivityN']
+    actv_df.to_csv('actv_df.csv')
+    return actv_df
+
+def run_job_posts():
     try:
         offers = read_csv('belgian_job_posts_2017.csv')  # 'df_100.csv')
     except:
         offers = smalldataframe()
     print("========= Data description =========")
     print(offers.columns)
-    #onmap(offers)
+    onmap(offers)
 
     print("offers from ", len(set(offers['company'])), "companies")
     print("Offers per province")
@@ -133,6 +168,7 @@ def main():
 
     analysisjobs(offers)
 
+def run_companies():
     curd = os.getcwd()
     print('file://localhost' + curd + '/bce_big_companies.jsonl')
     try:
@@ -143,8 +179,59 @@ def main():
         companies = None
         print("failed to read json")
     print(companies.columns)
-    companies.to_csv('companies.csv')
+    #companies.to_csv('companies.csv')
+    array_company = np.array(companies['EntityNumber'])
+    print("len", len(array_company), len(set(array_company)))
+    try:
+        # read if it exists
+        actv_df = pd.read_csv('actv_df.csv')
+        print('Reading existing file')
+    except:
+        # create
+        print("Creating the data frame of activities")
+        actv_df = createdfactivity(companies)
 
+    # add sector of activity
+    actv_df_red = actv_df[(actv_df['NaceVersion'] == 2008) &
+                          (actv_df['Classification'] == 'MAIN')]
+    nace_codes_2008 = pd.read_csv('NaceCode2008.csv', header=0,
+                                  names=['Section', 'Description', 'minCode',
+                                       'maxCode', 'grater', 'smaller'],
+                                  index_col=False)
+    #print(nace_codes_2008)
+    maxc = nace_codes_2008['maxCode'].tolist()
+    sections = []
+    for c in actv_df_red['NaceCode']:
+        try:
+            #   nace_codes_2008[nace_codes_2008['minCode'] ==
+            #                          [n for n in minc if n >= c][0]]['Section']
+            sections.append(nace_codes_2008[nace_codes_2008['maxCode'] ==
+                                      [n for n in maxc if n+1 > c][0]]['Section'].tolist()[0])
+        except:
+            #print("Code", c, "Not found")
+            sections.append(None)
+            pass
+    #print(sections)
+    actv_df_red['Section'] = Series(sections, index=actv_df_red.index)
+
+    # group by Section
+    groups_section = actv_df_red[['Section', 'EntityNumber']]\
+                     .groupby(['Section'], as_index=False).count()\
+                     .rename(columns={'EntityNumber': 'NEntityPerSec'})
+    print((groups_section))
+    plt.figure('N companies per Section')
+    ax2 = plt.subplot(111)
+    groups_section.plot.bar(x='Section', y='NEntityPerSec', ax=ax2, color='blue')
+    ax2.set_ylabel('# entities per Section')
+    xlabels = ax2.get_xticklabels()
+    new_labels = [l.get_text()[-1] for l in xlabels]
+    ax2.set_xticklabels(new_labels, rotation=40)
+
+
+def main():
+
+    run_job_posts()
+    #run_companies()
     plt.show()
 
 if __name__ == "__main__":
