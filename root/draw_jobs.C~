@@ -1,6 +1,0 @@
-#include <TTree.h>
-
-void draw_jobs(){
-  TTree *offers = ReadFile("actv_df.csv");
-  printf(offers);
-}
