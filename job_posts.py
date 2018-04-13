@@ -8,6 +8,7 @@ import numpy as np
 # drawing
 from matplotlib import pyplot as plt
 from matplotlib import colors as mcolors
+import seaborn
 
 # import for data frame
 from pandas import read_csv, read_json, Series
@@ -159,14 +160,42 @@ def run_job_posts():
         offers = smalldataframe()
     print("========= Data description =========")
     print(offers.columns)
-    onmap(offers)
+    #onmap(offers)
 
     print("offers from ", len(set(offers['company'])), "companies")
+
+    # density of jobs per region
+    # city is not always present
+    group_city = offers[['city', 'latitude','longitude', 'jobkey']]\
+                 .groupby(['latitude','longitude'], as_index=False)\
+                 .count()\
+                 .rename(columns={'jobkey': 'NOffersPerCity'})
+    group_city.to_csv('offer_per_city.csv')
+    group_prov = offers[['state','jobtitle']]\
+                 .groupby('state', as_index=False).count()\
+                 .rename(columns={'jobtitle': 'NOffersPerProvince'})
+    group_prov.to_csv('offer_per_prov.csv')
+    state_geo = 'belgium.geo.json'
+
+    mapbe = folium.Map(location=[50, 4], zoom_start=8)
+    #folium.Marker(group_city['city']).add_to(mapbe)
+    print(group_city[['latitude', 'longitude','NOffersPerCity']])
+    to_plot = group_city.pivot(index='longitude', columns='latitude', values='NOffersPerCity')
+    seaborn.heatmap(to_plot)
+    #seaborn.jointplot(x='longitude', y='latitude', data=group_prov, kind='kde')
+    mapbe.choropleth(geo_data=state_geo, data=group_city,
+                 columns=['city', 'NOffersPerCity'],
+                 fill_color='YlGn',
+                 key_on='feature.city',
+                 fill_opacity=0.7, line_opacity=0.2,
+                 legend_name='Number of job offers')
+    #folium.LayerControl().add_to(mapbe)
+    mapbe.save('noffers_provinceBE.html')
     print("Offers per province")
     print(offers.groupby('state', as_index=False)['jobtitle'].count())
     print("----------------------")
 
-    analysisjobs(offers)
+    #analysisjobs(offers)
 
 def run_companies():
     curd = os.getcwd()
