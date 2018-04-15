@@ -50,4 +50,49 @@ void draw_jobs(){
   hjobdensity->Draw("colz");
   gcities->Draw("P");
   coffers->SaveAs("offers_per_city.jpg");
+
+  TString prov_wl[5] = {"WNA", "WLX", "WBR", "WHT", "WLG"};
+  TString prov_fl[5] = {"VAN", "VWV", "VLI", "VOV", "VBR"};
+  Int_t id_prov[11];
+  for (Int_t i=0; i<11; i++){
+    id_prov[i]=i;
+  }
+  Int_t pop_br = 1187890;
+  Int_t pop_wl[5] = {489204,  280327,  396840, 1337157,1098688};
+  Int_t pop_fl[5] = {1824136, 1181828,  863725,1486722, 1121693};
+  Float_t pop_fl_tot = 0;
+  Float_t pop_wl_tot = 0;
+  Float_t pop_tot = 0;
+  //TGraph *g_pop = new TGraph(11, id_prov, inhab);
+  TH1I *h_pop_fl = new TH1I("h_pop_fl","Population Fl", 5, -0.5, 4.5);
+  h_pop_fl->SetFillColor(kPink+9);
+  TH1I *h_pop_wl = new TH1I("h_pop_wl","Population Wal", 5, 4.5, 9.5);
+  h_pop_wl->SetFillColor(kOrange-1);
+  TH1I  *h_pop_br= new TH1I("h_pop_br","Population per province; province; population", 11, -0.5, 10.5);
+  h_pop_br->SetFillColor(kCyan-6);
+  for (Int_t i=0; i<5; i++){
+    h_pop_fl->SetBinContent(i+1, pop_fl[i]);
+    h_pop_br->GetXaxis()->SetBinLabel(i+1, prov_fl[i]);
+    pop_fl_tot+=pop_fl[i];
+    h_pop_wl->SetBinContent(i+1, pop_wl[i]);
+    h_pop_br->GetXaxis()->SetBinLabel(i+6, prov_wl[i]);
+    pop_wl_tot+=pop_wl[i];
+  }
+  pop_tot = pop_wl_tot + pop_fl_tot + pop_br;
+  h_pop_br->SetBinContent(11, pop_br);
+  h_pop_br->GetXaxis()->SetBinLabel(11, "BRU");
+  
+  cout<<"Pop fl "<< pop_fl_tot<< " ->  "<< pop_fl_tot/pop_tot << endl;
+  cout<<"Pop wl "<< pop_wl_tot << " ->  "<< pop_wl_tot/pop_tot << endl;
+  cout<<"Pop br "<< pop_br << " ->  "<< pop_br/pop_tot << endl;
+  
+  
+  //g_pop->SetNameTitle("gpop", "Population per province; province; population");
+  //g_pop->SetMarkerStyle(kFullSquare);
+  TCanvas *c_pop = new TCanvas("c_pop","Population per province");
+  c_pop->cd();
+  h_pop_br->Draw();
+  h_pop_fl->Draw("sames");
+  h_pop_wl->Draw("sames");
+
 }

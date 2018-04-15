@@ -26,7 +26,7 @@ def onmap(dataframe):
     test = folium.Map(location=[50.5039, 4.4699])
     coords = dataframe[['latitude', 'longitude', 'company']].values.tolist()
     for c in coords:
-        #print(c[2])
+        print(c[2])
         try:
             folium.Marker([c[0], c[1]], popup=c[2]).add_to(test)
         except:
@@ -62,6 +62,12 @@ def analysisjobs(offers):
     ax = plt.subplot(111)
     plt.figure("Normalized job offers per month")
     axn = plt.subplot(111)
+    flatui = ["cadetblue", "magenta", "magenta","magenta", "magenta",
+    "darkgoldenrod", "darkgoldenrod", "darkgoldenrod", "darkgoldenrod",
+    "darkgoldenrod", "darkgoldenrod"]
+    mkl = ['+', '.', '^', 'p', 'X', '*', '8', 's', 'P', '*', '-' ]
+    seaborn.set_palette(flatui)
+    offers.pivot_table('jobtitle', index='month', columns='state', aggfunc='count').plot()
     n_j_m = []
     # colors
     colors = dict(mcolors.BASE_COLORS, **mcolors.CSS4_COLORS)
@@ -84,6 +90,7 @@ def analysisjobs(offers):
             curcl = 'cadetblue'
             curfacec = curcl
         elif s[0] == 'V':
+            print(iv)
             iv += 1
             curcl = 'magenta'  # sorted_names[iv+sorted_names.index('magenta')]
             curfacec = 'none'
@@ -123,11 +130,14 @@ def createdfactivity(df_companies):
     activitygroups = []
     nacever = []
     clas = []
+    year = []
     for comp in df_companies['EntityNumber']:
         for act in df_companies[df_companies['EntityNumber'] == comp]['activities']:
             mindex.append(list(zip([comp] * len(act),
                           list(range(0, len(act))))))
-
+            # attention! year repeated for each activity, do not use for counting
+            year.append([df_companies[df_companies['EntityNumber'] == comp]['StartYear'].values[0]
+            for i in range(0, len(act))])
             #nacodes[comp] = {i: [a['NaceCode'], a['ActivityGroup'],
              #                  a['NaceVersion'], a['Classification']]
              #              for i, a in enumerate(act)}
@@ -143,17 +153,66 @@ def createdfactivity(df_companies):
     actv_df = pd.DataFrame(index=mi) #,
                            #columns=['NaceCode', 'ActivityGroup', 'NaceVersion',
                            #        'Classification'])
-    print("df", actv_df)
-
+    actv_df['StartYear'] = Series([item for sublist in year for item in sublist], index=mi)
     actv_df['NaceCode'] = Series([item for sublist in nacodes for item in sublist], index=mi)
     actv_df['ActivityGroup'] = Series([item for sublist in activitygroups for item in sublist], index=mi)
     actv_df['NaceVersion'] = Series([item for sublist in nacever for item in sublist], index=mi)
     actv_df['Classification'] = Series([item for sublist in clas for item in sublist], index=mi)
     #actv_df.index.names = ['EntityNumber', 'ActivityN']
     actv_df.to_csv('actv_df.csv')
+    print("df", actv_df.head())
     return actv_df
 
+def createcompanygeo(companies):
+    print("Create company geo")
+    # 'canonical_denomination'
+    comp_name, commune, entries, lang = [], [], [], []
+    for comp in companies['canonical_denomination']:
+        try:
+            comp_name.append([comp])
+        except:
+            comp_name.append([""])
+    for comp in companies['address']:
+        try:
+            commune.append([comp['MunicipalityNL']])
+        except:
+            commune.append([""])
+    for proc in companies['processed']:
+        try:
+            entries.append([proc['geoloc']['longitude'],
+                           proc['geoloc']['latitude'],
+                           proc['geoloc']['zip_code']])
+        except:
+            entries.append(["", "", ""])
+    dic_lang = {'0': 'all', '1': 'FR', '2': 'NL', '3': 'DE', '4':'EN'}
+    for denom in companies['denominations']:
+        lang.append(list(set([dic_lang[d['Language']] for d in denom])))
+    #geo_lang_df
+    idx = range(0, len(comp_name))
+    print(len(comp_name), len(commune), len(entries), len(lang))
+    geo_lan_df = pd.DataFrame(index=idx)
+    geo_lan_df['company'] = Series([item for sublist in comp_name for item in sublist], index=idx)
+    print("Company ok")
+    geo_lan_df['longitude'] = Series([item[0] for item in entries], index=idx)
+    print("Longitude okay")
+    geo_lan_df['latitude'] = Series([item[1]  for item in entries], index=idx)
+    print("Latitude okay")
+    geo_lan_df['zip_code'] = Series([item[2]  for item in entries], index=idx)
+    print("zip okay")
+    geo_lan_df['MunicipalityNL'] = Series([item for sublist in commune for item in sublist], index=idx)
+    print("commune okay")
+    geo_lan_df['Languages'] = Series([item for item in lang], index=idx)
+    print(geo_lan_df.head())
+    geo_lan_df.to_csv('company_geo.csv')
+    return geo_lan_df
+
 def run_job_posts():
+
+    plt.figure("Inhabitants")
+    ax0 = plt.subplot(111)
+    plt.plot(np.arange(0, len(INH.keys())), INH.values())
+
+    print("Analysis of job offers")
     try:
         offers = read_csv('belgian_job_posts_2017.csv')  # 'df_100.csv')
     except:
@@ -162,15 +221,17 @@ def run_job_posts():
     print(offers.columns)
     #onmap(offers)
 
-    print("offers from ", len(set(offers['company'])), "companies")
+    print(len(offers), "offers from ", len(set(offers['company'])), "companies")
 
     # density of jobs per region
     # city is not always present
+    print("Ncities", len(set(offers['city'])))
     group_city = offers[['city', 'latitude','longitude', 'jobkey']]\
                  .groupby(['latitude','longitude'], as_index=False)\
                  .count()\
                  .rename(columns={'jobkey': 'NOffersPerCity'})
     group_city.to_csv('offer_per_city.csv')
+    print("Groups of cities", len(group_city))
     group_prov = offers[['state','jobtitle']]\
                  .groupby('state', as_index=False).count()\
                  .rename(columns={'jobtitle': 'NOffersPerProvince'})
@@ -192,12 +253,21 @@ def run_job_posts():
     #folium.LayerControl().add_to(mapbe)
     mapbe.save('noffers_provinceBE.html')
     print("Offers per province")
-    print(offers.groupby('state', as_index=False)['jobtitle'].count())
+    job_state = offers.pivot_table('jobkey', index='state', aggfunc='count')
+    print(job_state)
+    #print(offers.groupby('state', as_index=False)['jobtitle'].count())
     print("----------------------")
+    plt.figure("Job offers per province")
+    ax1 = plt.subplot(111)
+    job_state.plot.bar(legend=False, ax=ax1)
+    ax1.set_xlabel("")
 
-    #analysisjobs(offers)
+    analysisjobs(offers)
+
 
 def run_companies():
+
+    print("Analysis of companies")
     curd = os.getcwd()
     print('file://localhost' + curd + '/bce_big_companies.jsonl')
     try:
@@ -211,54 +281,92 @@ def run_companies():
     #companies.to_csv('companies.csv')
     array_company = np.array(companies['EntityNumber'])
     print("len", len(array_company), len(set(array_company)))
+    companies['StartDate'] = pd.to_datetime(companies['StartDate'])
+    companies['StartYear'] = companies['StartDate'].map(lambda x: x.year)
+
     try:
         # read if it exists
         actv_df = pd.read_csv('actv_df.csv')
-        print('Reading existing file')
+        print('Reading existing file actv_df.csv')
     except:
         # create
         print("Creating the data frame of activities")
         actv_df = createdfactivity(companies)
+    print("table activities", actv_df.columns, actv_df.head())
 
-    # add sector of activity
-    actv_df_red = actv_df[(actv_df['NaceVersion'] == 2008) &
-                          (actv_df['Classification'] == 'MAIN')]
-    nace_codes_2008 = pd.read_csv('NaceCode2008.csv', header=0,
-                                  names=['Section', 'Description', 'minCode',
-                                       'maxCode', 'grater', 'smaller'],
-                                  index_col=False)
-    #print(nace_codes_2008)
-    maxc = nace_codes_2008['maxCode'].tolist()
-    sections = []
-    for c in actv_df_red['NaceCode']:
-        try:
-            #   nace_codes_2008[nace_codes_2008['minCode'] ==
-            #                          [n for n in minc if n >= c][0]]['Section']
-            sections.append(nace_codes_2008[nace_codes_2008['maxCode'] ==
-                                      [n for n in maxc if n+1 > c][0]]['Section'].tolist()[0])
-        except:
-            #print("Code", c, "Not found")
-            sections.append(None)
-            pass
-    #print(sections)
-    actv_df_red['Section'] = Series(sections, index=actv_df_red.index)
-
+    try:
+        actv_df_red = pd.read_csv('actv_df_2008_MAIN_sections.csv')
+        print('Reading existing file actv_df_2008_MAIN.csv')
+    except:
+        # add sector of activity
+        actv_df_red = actv_df[(actv_df['NaceVersion'] == 2008) &
+                              (actv_df['Classification'] == 'MAIN')]
+        nace_codes_2008 = pd.read_csv('NaceCode2008.csv', header=0,
+                                      names=['Section', 'Description', 'minCode',
+                                           'maxCode', 'grater', 'smaller'],
+                                      index_col=False)
+        #print(nace_codes_2008)
+        maxc = nace_codes_2008['maxCode'].tolist()
+        sections = []
+        for c in actv_df_red['NaceCode']:
+            try:
+                #   nace_codes_2008[nace_codes_2008['minCode'] ==
+                #                          [n for n in minc if n >= c][0]]['Section']
+                sections.append(nace_codes_2008[nace_codes_2008['maxCode'] ==
+                                          [n for n in maxc if n+1 > c][0]]['Section'].tolist()[0])
+            except:
+                #print("Code", c, "Not found")
+                sections.append(None)
+                pass
+        #print(sections)
+        actv_df_red['Section'] = Series(sections, index=actv_df_red.index)
+        actv_df_red.to_csv('actv_df_2008_MAIN_sections.csv')
+    print("table with Sections", actv_df_red.columns, actv_df_red.head())
     # group by Section
-    groups_section = actv_df_red[['Section', 'EntityNumber']]\
-                     .groupby(['Section'], as_index=False).count()\
-                     .rename(columns={'EntityNumber': 'NEntityPerSec'})
-    print((groups_section))
+    sections_count = actv_df_red.pivot_table('NaceCode', index='Section', aggfunc='count')
+    #print(sections_count)
     plt.figure('N companies per Section')
     ax2 = plt.subplot(111)
-    groups_section.plot.bar(x='Section', y='NEntityPerSec', ax=ax2, color='blue')
+    sections_count.plot.bar(legend=False,ax=ax2, title="Nace Code Version 2008 - MAIN activity")
     ax2.set_ylabel('# entities per Section')
     xlabels = ax2.get_xticklabels()
     new_labels = [l.get_text()[-1] for l in xlabels]
     ax2.set_xticklabels(new_labels, rotation=40)
+    reg_y_bins = pd.cut(actv_df_red['StartYear'],
+                        [1950, 1965, 1970, 1980, 1990, 2000])
+    sections_count_Y = actv_df_red.pivot_table('NaceCode', index='Section',
+                                   columns=reg_y_bins, aggfunc='count')
+    plt.figure('N companies per Section per Period')
+    ax3 = plt.subplot(111)
+    sections_count_Y.plot.bar(title="Nace Code Version 2008 - MAIN activity", ax=ax3)
+    ax3.set_ylabel('# entities per Section per Period')
+    xlabels = ax3.get_xticklabels()
+    new_labels = [l.get_text()[-1] for l in xlabels]
+    ax3.set_xticklabels(new_labels, rotation=40)
 
+    # companies registered per year
+    plt.figure("HistoricalData")
+    ax1 = plt.subplot(111)
+    companies.pivot_table('EntityNumber', index='StartYear', aggfunc='count')\
+             .plot(legend=False, ax=ax1)
+    ax1.set_ylabel("# redistered companies")
+
+    try:
+        geo_lan_df = read_csv('company_geo.csv')
+        print("Reading existing file company_geo.csv")
+    except:
+        geo_lan_df = createcompanygeo(companies)
+
+    # geographical location
+    #onmap(geo_lan_df)
+    comp_lang = geo_lan_df.pivot_table('company', index='Languages', aggfunc='count')
+    print(comp_lang)
+    comp_lang.plot.bar()
 
 def main():
 
+    seaborn.set()
+    seaborn.set_palette(seaborn.color_palette("bright", 11))
     run_job_posts()
     #run_companies()
     plt.show()
