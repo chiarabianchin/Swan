@@ -42,9 +42,11 @@ def analysisjobs(offers):
     offers.sort_values(by=['state'])
     # offers per month integrated over all provinces
     plt.figure("Integrated jobs per month")
+    ax1 = plt.subplot(111)
     #offers.groupby('month', as_index=False)['jobtitle'].count()
 
-    offers.groupby('month')['jobtitle'].count().plot()
+    offers.groupby('month')['jobtitle'].count().plot(ax=ax1)
+    ax1.set_ylabel('# jobs per month')
 
     # group by month and state (province)
     off_state_month = offers.groupby(['state', 'month'],
@@ -261,6 +263,7 @@ def run_job_posts():
     ax1 = plt.subplot(111)
     job_state.plot.bar(legend=False, ax=ax1)
     ax1.set_xlabel("")
+    ax1.set_ylabel("# jobs per province")
 
     analysisjobs(offers)
 
@@ -349,7 +352,7 @@ def run_companies():
     ax1 = plt.subplot(111)
     companies.pivot_table('EntityNumber', index='StartYear', aggfunc='count')\
              .plot(legend=False, ax=ax1)
-    ax1.set_ylabel("# redistered companies")
+    ax1.set_ylabel("# registered companies per year")
 
     try:
         geo_lan_df = read_csv('company_geo.csv')
